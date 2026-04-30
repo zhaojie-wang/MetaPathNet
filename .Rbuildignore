@@ -2,7 +2,7 @@
 ^\.Rproj\.user$
 ^Meta$
 ^vignettes/.*\.R$
-^vignette-preview$
+^vignette_preview$
 ^\.gitignore$
 ^\.DS_Store$
 ^\.Rhistory$

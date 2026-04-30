@@ -408,9 +408,7 @@ MPN_permutePaths <- function(
         plot.margin      = ggplot2::margin(t = 10, r = 10, b = 10, l = 35)
       )
 
-    if (isTRUE(plot)) {
-      p
-    }
+    print(p)
   }
 
   #==============================================================

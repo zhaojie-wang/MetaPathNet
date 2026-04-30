@@ -1,0 +1,12 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^Meta$
+^vignettes/.*\.R$
+^\.gitignore$
+^\.DS_Store$
+^\.Rhistory$
+^check_log[.]txt$
+^install_log[.]txt$
+^MetaPathNet[.]Rcheck$
+^MetaPathNet_.*[.]tar[.]gz$
+^data-raw$

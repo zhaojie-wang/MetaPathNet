@@ -1,0 +1,17 @@
+*.R text eol=lf
+*.Rd text eol=lf
+*.Rmd text eol=lf
+*.bib text eol=lf
+
+DESCRIPTION text eol=lf
+NAMESPACE text eol=lf
+NEWS text eol=lf
+LICENSE text eol=lf
+.Rbuildignore text eol=lf
+.gitignore text eol=lf
+
+*.rda binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.pdf binary

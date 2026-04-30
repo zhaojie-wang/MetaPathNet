@@ -1,0 +1,456 @@
+---
+title: "`MetaPathNet`: network analysis of the choline-TMA-TMAO host-microbiome axis"
+author: "Zhaojie Wang<br>Francesc Puig-Castellví<br>Marc-Emmanuel Dumas"
+date: "29 April 2026"
+output:
+  BiocStyle::html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+bibliography: references_TMA.bib
+vignette: >
+  %\VignetteIndexEntry{MetaPathNet: network analysis of the choline-TMA-TMAO host-microbiome axis}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  eval = TRUE,
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE
+)
+
+knitr::opts_knit$set(bookdown.internal.label = FALSE)
+```
+
+<style>
+.figure {
+  text-align: center;
+}
+.figure p.caption {
+  text-align: center;
+  font-size: 0.95em;
+  font-style: italic;
+  margin-top: 0.4em;
+}
+</style>
+
+# Introduction
+
+`MetaPathNet` is an R package for pathway querying, network construction, and network analysis based on the Kyoto Encyclopedia of Genes and Genomes (KEGG) [@ogata_kegg_1999], with a focus on host–microbiome interactions inferred from metagenomic and metabolomic data.
+
+Several R and Bioconductor tools already support KEGG-based analysis. For example, `KEGGgraph` parses KEGG pathway files into graph-compatible objects [@zhang_kegggraph_2009], `pathview` maps omics data onto KEGG pathway diagrams [@luo_pathview_2013], and `ggkegg` supports pathway visualisation and customisation [@sato_ggkegg_2023]. Together, these tools extend the practical use of KEGG, yet the cross-species structure of the database remains largely unexploited for connecting microbial and host functions within a unified workflow that combines network construction, visualisation, and analysis.
+
+`MetaPathNet` addresses this gap by integrating cross-species network construction, external and user-defined reaction extension, topology-driven analysis, origin annotation, pathway over-representation analysis, and R/Cytoscape visualisation within a single case-adaptable framework.
+
+In this vignette, KEGG and complementary database resources are used through `MetaPathNet` to reconstruct a host–microbiome metabolic network centered on the choline–TMA–TMAO metabolic axis [@wang_gut_2011], and to perform topology and enrichment analyses to interpret this metabolic module.
+
+# Installation
+
+Once available from Bioconductor, `MetaPathNet` can be installed as follows:
+
+```{r install, include=TRUE, eval=FALSE}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("MetaPathNet")
+```
+
+```{r load_package}
+library(MetaPathNet)
+library(ggplot2)
+```
+
+# Workflow
+
+## Overview
+
+This vignette addresses the following related questions in the context of the choline–TMA–TMAO axis:
+
+1. How can metabolites, functional groups of genes (KEGG Orthology, KO), and organisms related to this metabolic module be integrated into a host–microbiome metabolic network?
+2. How can topology analysis be used to highlight connections and components related to the choline axis?
+3. Which metabolic pathways are most strongly represented in the resulting choline–TMA–TMAO subnetwork?
+
+The workflow therefore proceeds through identifier mapping, cross-species network construction, shortest-path analysis, origin annotation, permutation testing, and pathway over-representation analysis.
+
+## Identifier mapping
+
+The package requires KEGG identifiers as common reference IDs for metabolites, genes, enzymes, and organisms to support network construction and analysis. To facilitate the process of network construction, the `MetaPathNet` package includes the `MPN_keggFinder()` function for retrieving KEGG identifiers from metabolite names, gene symbols, and from species taxonomy IDs (i.e., NCBI).
+
+In this choline-related case study, the selected metabolites cover the main trimethylated nutrient and methylamine axis, including choline, carnitine, betaine, gamma-butyrobetaine, trimethylamine (TMA), and trimethylamine N-oxide (TMAO). The package supports flexible metabolite mapping through synonym matching and case-insensitive search.
+
+```{r compounds_mapping}
+## Selected compound names and synonyms
+compound_names <- c("choline", "carnitine", "betaine", 
+                    "gamma-butyrobetaine", "trimethylamine", "tmao")
+
+## Map compounds to KEGG compound IDs
+compound_kegg <- MetaPathNet::MPN_keggFinder(
+  KEGG_database = "compound",
+  searchBy      = "name",
+  query         = compound_names
+)
+
+## View mapped compound IDs
+compound_kegg
+```
+
+`MPN_suggestEntities()` supports semi-automated candidate selection in a case study workflow. Starting from the selected metabolites, it retrieves associated genes (KOs) through linked reaction information, providing a candidate KO list to guide the selection of genes of interest.
+
+```{r ko_suggestion}
+## Define the mapped metabolite KEGG IDs
+compound_tma <- compound_kegg$KEGG_ID
+
+## Suggest candidate KOs from the selected metabolites
+ko_candidates <- MPN_suggestEntities(
+  query  = compound_tma,
+  entity = "compound"
+)
+
+## View suggested KO candidates
+head(ko_candidates)
+```
+
+The selected genes represent key biological functions involved in the choline-TMA-TMAO axis, including trimethylamine monooxygenase (*tmm* / `K18277`), trimethylamine N-oxide reductase (*torA* / `K07811`), host choline oxidation via choline dehydrogenase (*CHDH* / `K00108`), and choline kinase (*CHK* / `K14156`). 
+
+However, choline trimethylamine-lyase (*cutC* / `K20038`) and host flavin-containing monooxygenases (*FMO* / `K00485`) were not recovered from the compound-based suggestion step, although they remain important for this case study. `MPN_suggestEntities()` should therefore be used as a guidance tool, while literature knowledge remains helpful for broader biological selection.
+
+The same function can also retrieve candidate organisms from a KO list. It reports prokaryotic organisms carrying the selected functions, counts how many query KOs are represented in each organism, and ranks them as a reference list for organism selection.
+
+```{r organism_suggestion}
+## Define KO candidates of interest
+gene_tma <- c("K18277", "K07811", "K00108", "K14156", "K00485", "K20038")
+
+## Suggest candidate organisms from the selected KOs
+organism_candidates <- MPN_suggestEntities(
+  query  = gene_tma,
+  entity = "ko"
+)
+
+## View suggested organism candidates
+head(organism_candidates)
+```
+
+*Escherichia coli* O18:K1:H7 UTI89 (KEGG organism code: `eci`) was selected as a representative gut-associated bacterial strain for this case study.
+
+## Network construction
+
+An edge list representing the cross-species metabolic network was constructed from the metabolic pathway information of *Homo sapiens* (`hsa`) and *Escherichia coli* O18:K1:H7 UTI89 (`eci`), to represent a simplified host-microbiome metabolic context of the human gut in this case study.
+
+```{r network_construction, eval=FALSE}
+## Construct the host-microbiome metabolic network
+network_hostMicrobe <- MPN_crossSpeciesNetwork(
+  organism_codes = c("hsa", "eci"),
+  path_type      = "metabolic"
+)
+```
+
+```{r load_hostMicrobe_network, include=FALSE}
+network_hostMicrobe <- readRDS(
+  system.file("extdata", "network_hostMicrobe.rds", package = "MetaPathNet")
+)
+```
+
+```{r network_view}
+## Preview the integrated network edge list
+head(network_hostMicrobe)       
+```
+
+The network can be visualised in Cytoscape (version 3.9.0 or higher; ensure it is running before execution). Genes and compounds are automatically categorised and colour-coded.
+
+```{r network_visualisation, eval=FALSE}
+## Visualise the integrated network in Cytoscape
+MPN_viewNetworkCy(
+  network_table     = network_hostMicrobe,
+  category          = TRUE,
+  style_interaction = TRUE,
+  node_compound     = "#9DC7DD",
+  node_gene         = "#9ED17B",
+  network_title     = "Integrated host–microbiome network",
+  collection_title  = "MetaPathNet_Examples"
+)
+```
+
+<h4 style="text-align: center;">Integrated host-microbe network</h4>
+```{r network_overview, echo=FALSE, message=FALSE, warning=FALSE, out.width="80%", fig.align="center", fig.cap="Figure 1. Integrated host–microbiome metabolic network."}
+knitr::include_graphics(system.file("extdata", "tma_integrated_network.png", package = "MetaPathNet"))
+```
+
+The integrated network is larger than the selected input list because it also includes **intermediate biological entities** needed to connect nodes and preserve pathway context.
+
+Because of this larger network size, it is not always straightforward to verify the presence of the selected metabolites and genes by visual inspection alone. Their presence was therefore checked explicitly using `MPN_findMappedNodes()`.
+
+```{r network_check}
+## Check mapped compounds in the integrated network
+compound_mapped <- MetaPathNet::MPN_findMappedNodes(
+  nodes         = compound_tma,
+  network_table = network_hostMicrobe
+)
+
+## Check mapped KOs in the integrated network
+gene_mapped <- MetaPathNet::MPN_findMappedNodes(
+  nodes         = gene_tma,
+  network_table = network_hostMicrobe
+)
+```
+
+In the output, `mapped_nodes` indicates nodes present in the network, whereas `unmapped_nodes` indicates nodes not found in the network at this stage.
+
+```{r network_check_result}
+## View mapped and unmapped nodes
+compound_mapped
+gene_mapped
+```
+
+## Network extension
+
+Some selected genes were not recovered in the initial network because relevant interactions are not captured in the selected organism set or are not explicitly recorded in KEGG.
+
+*FMO3* is a human enzyme involved in the oxidation of TMA to TMAO and is represented in KEGG by the orthologous group *FMO* (`K00485`). However, this function is not explicitly linked in KEGG for this case study. To preserve this biologically relevant step, `MPN_customReaction()` was used to add a manually curated reaction in edge-list format.
+
+```{r manual_curation}
+## Define a custom FMO-associated TMA-to-TMAO reaction
+fmo_reaction <- data.frame(
+  reaction_id = "TMA_to_TMAO_FMO",
+  substrates  = "cpd:C00565",
+  products    = "cpd:C01104",
+  ko          = "K00485",
+  direction   = "irreversible",
+  stringsAsFactors = FALSE
+)
+
+## Convert to edge-list format
+fmo_extension <- MetaPathNet::MPN_customReaction(
+  reaction_table = fmo_reaction,
+  substrate_col  = "substrates",
+  product_col    = "products",
+  ko_col         = "ko",
+  direction_col  = "direction"
+)
+```
+
+`MPN_mapReaction()` can map external reaction identifiers from commonly used databases such as MetaCyc [@caspi_metacyc_2018], Rhea [@bansal_rhea_2022] into MetaPathNet-style edges, using KEGG identifiers as a common reference ID where available. 
+
+MetaCyc reactions, `RXN-12900` and `RXN-13946`, were added as complementary information for the choline-TMA-TMAO axis.
+
+```{r network_extension}
+## Map MetaCyc reactions to edge-list format
+tma_extension <- MPN_mapReaction(
+  reaction_ids = c("RXN-12900", "RXN-13946"),
+  source       = "metacyc"
+)
+
+## Preview the mapped reaction edges
+head(tma_extension)
+```
+
+The MetaCyc-derived reactions and the manually curated FMO reaction were then merged into the initial cross-species network, `network_hostMicrobe`. The selected metabolites and KOs were subsequently rechecked in the extended network.
+
+```{r refined_network_check}
+## Merge the reaction extension into the cross-species network
+network_mixed <- MetaPathNet::MPN_mergeNetworks(
+  network_hostMicrobe,   ## Initial host–microbiome network
+  tma_extension,         ## MetaCyc reaction extension
+  fmo_extension          ## Manually curated FMO reaction
+)
+
+## Extract mapped compounds in the combined network
+compound_tma <- MetaPathNet::MPN_findMappedNodes(
+  nodes         = compound_tma,
+  network_table = network_mixed
+)$mapped_nodes
+
+## Extract mapped KOs in the combined network
+gene_tma <- MetaPathNet::MPN_findMappedNodes(
+  nodes         = gene_tma,
+  network_table = network_mixed
+)$mapped_nodes
+```
+
+## Topology analysis
+
+The extended cross-species network still contains many background edges. Network-based topology analysis was therefore used to focus on the metabolic axis of interest.
+
+In this step, the selected KO and metabolite nodes related to the choline–TMA–TMAO axis were used as source and target nodes, respectively. These biological entities served as the starting and ending points for shortest-path extraction, allowing the construction of a **more focused subnetwork centered on the choline–TMA–TMAO axis**.
+
+The choice of source and target nodes can vary depending on the biological question being addressed. In other case studies, this direction may be reversed if the aim is to investigate how metabolites act as upstream regulators of gene-associated functions.
+
+The `mode` argument defines how paths are searched in the network: `out` follows edge direction from source to target, whereas `all` ignores direction and treats the network as undirected. In this case study, `mode = "all"` was used because the metabolites of interest can appear either as substrates or as products. This setting therefore makes it possible to recover connections on both sides of a reaction and to better illustrate the full set of possible links between metabolites and KOs.
+
+It is also common for a given node pair to be connected by more than one shortest path. Setting `betweenness = TRUE` retains one shortest path among ties by ranking candidate shortest paths according to the betweenness of their intermediate nodes. In practice, this favours paths that pass through more topologically central bridging nodes.
+
+```{r topology_analysis}
+## Compute the shortest-path distance matrix between selected KOs and compounds
+distance_tma <- MetaPathNet::MPN_distances(
+  network_table = network_mixed,
+  source_nodes  = gene_tma,
+  target_nodes  = compound_tma,
+  mode          = "all",
+  name          = TRUE
+)
+
+## View distances from selected genes to selected metabolites
+distance_tma[1:3, , drop = FALSE]
+
+## Extract the shortest-path subnetwork as a MetaPathNet-style edge list
+network_shortestPath <- MetaPathNet::MPN_shortestPaths(
+  network_table      = network_mixed,
+  source_nodes       = gene_tma,
+  target_nodes       = compound_tma,
+  mode               = "all",
+  output             = "network_matrix",
+  name               = FALSE,
+  distance_threshold = 12,   # exclude overly long paths
+  betweenness        = TRUE
+)
+```
+
+The network can also be visualised directly in the R environment and is best suited to relatively small networks. Node colours can be customised in both R and Cytoscape. For larger networks, Cytoscape is generally recommended, as it provides better interactivity and more extensive visual customisation. 
+
+```{r network_visualisation_R, message=FALSE, warning=FALSE, fig.width=8, fig.height=6, out.width="80%", fig.align="center", fig.cap="Figure 2. R-based visualization of the choline–TMA–TMAO shortest-path subnetwork."}
+network_tma_R <- MetaPathNet::MPN_viewNetworkR(
+  network_table = network_shortestPath,
+  category      = TRUE,   ## Automatically categorise and colour-code genes and compounds
+  name          = FALSE,
+  node_size     = 4,      ## Custom node size
+  node_compound = "#9DC7DD",
+  node_gene     = "#9ED17B",
+  network_title = "TMA/TMAO shortest-path subnetwork"
+)
+print(network_tma_R)
+```
+
+## Origin annotation
+
+The shortest-path subnetwork is more directly centered on the choline-TMA-TMAO axis. Using `MPN_annotateOrigin()`, KO nodes were annotated by inferred origin as human-associated, microbial-associated, or shared, allowing direct interpretation of the biological components involved in this module. Cytoscape also provides more flexible customisation of node colours and edge types.
+
+```{r KO_origin_visualisation, eval=FALSE}
+## Visualise the origin-annotated shortest-path network in Cytoscape
+MetaPathNet::MPN_annotateOrigin(
+  network_table     = network_shortestPath,
+  name              = TRUE,
+  export_cytoscape  = TRUE,
+  network_title     = "Origin-annotated shortest-path network",
+  collection_title  = "MetaPathNet_Examples"
+)
+```
+
+<h4 style="text-align: center;">Origin-annotated shortest-path network</h4>
+```{r SP_network_overview, echo=FALSE, message=FALSE, warning=FALSE, out.width="100%", fig.align="center", fig.cap="Figure 3. Origin-annotated visualization of the choline–TMA–TMAO shortest-path subnetwork."}
+knitr::include_graphics(system.file("extdata", "tma_shortestPath_network.png", package = "MetaPathNet"))
+```
+
+The same subnetwork can also be represented as a node-level annotation table, including node name, type, and inferred origin.
+
+```{r KO_origin_annotation}
+## Annotate node origin in the shortest-path subnetwork
+origin_shortestPath <- MetaPathNet::MPN_annotateOrigin(
+  network_table    = network_shortestPath,
+  bacteria_codes   = "eci",
+  name             = TRUE,
+  export_cytoscape = FALSE
+)
+
+## View the node-level origin table
+head(origin_shortestPath)
+```
+
+## Permutation test
+
+Permutation testing was used to compare the observed mean shortest-path length with the mean shortest-path length obtained from random node sets of the same size under the null distribution, testing whether the observed gene-metabolite connections are closer in the network than expected by chance.
+
+In this case study, KO nodes were defined as source nodes and the selected metabolites as target nodes, so that the permutation framework could be applied to the extended cross-species network in a consistent source-to-target setting. In this analysis, `mode = "out"` was used to preserve the recorded edge direction and maintain this directional interpretation of the network.
+
+```{r permutation_test, message=FALSE, warning=FALSE, fig.width=8, fig.height=6, fig.align="center", fig.cap="Figure 4. Null-model permutation test of gene–metabolite proximity in the reconstructed network."}
+## Permutation test: KO set -> TMA-axis-related metabolites
+perm_host_tma <- MetaPathNet::MPN_permutePaths(
+  network_table = network_mixed,
+  source_nodes  = gene_tma,
+  target_nodes  = compound_tma,
+  n_perm        = 1000,
+  mode          = "out",
+  plot          = TRUE,
+  return_perm   = TRUE
+)
+```
+
+The *p*-value indicates whether the selected genes and metabolites tend to lie closer to each other in the network than would be expected for unrelated molecules.
+
+## Pathway enrichment analysis
+
+Over-representation analysis (ORA) is a common pathway analysis (PA) approach based on existing biochemical knowledge. `MPN_enrichPathway()` implements this method and tests whether selected nodes (test set) are over-represented in KEGG pathways compared with all nodes in the network (background set). The `entity` argument specifies whether the analysis is performed at the **KO level (`"ko"`), the compound level (`"compound"`), or using both KO and compound information (`"integrated"`)**.
+
+In this case study, species-specific pathways were first retrieved with `MPN_getPathIDs()`, and the metabolic pathways shared by host and microbe were then used as the pathway set for enrichment analysis.
+
+```{r pathway_retrieval}
+## Retrieve KEGG pathways for human and E. coli
+paths <- MPN_getPathIDs(c("hsa", "eci"))
+
+## Keep shared metabolic pathway IDs only
+pathway_hostMicrobe <- names(
+  which(table(sub("^[a-zA-Z]+", "map", paths$Path_id[paths$Path_type == "metabolic"])) == 2)
+)
+
+## View shared metabolic pathway IDs
+head(pathway_hostMicrobe)
+```
+
+The choline-TMA-TMAO-focused shortest-path subnetwork (`network_shortestPath`) was used as the test set, and the full cross-species network (`network_mixed`) as the background set. This analysis was used to identify the pathways most strongly represented in the extracted TMA/TMAO-related module.
+
+```{r enrichment_analysis}
+## Integrated pathway enrichment on the shortest-path subnetwork
+enrich_tma <- MPN_enrichPathway(
+  test_set       = network_shortestPath,  # accepts a MetaPathNet-style edge list or a node vector
+  background_set = network_mixed,
+  pathway_set    = pathway_hostMicrobe,
+  entity         = "integrated",
+  pvalueCutoff   = 0.05,
+  add_hits       = TRUE
+)
+```
+
+A dot plot was used to display the ten metabolic pathways with the most significant adjusted *p*-values.
+
+```{r enrichment_dotplot, message=FALSE, warning=FALSE, fig.width=8, fig.height=6, fig.align="center", fig.cap="Figure 5. Integrated pathway enrichment of the choline–TMA–TMAO shortest-path subnetwork, showing the top 10 pathways ranked by adjusted p-value."}
+## Prepare enrichment results for plotting
+plot_df <- enrich_tma[, c("Description", "p_adj", "significance")]
+plot_df$p_adj <- as.numeric(plot_df$p_adj)
+plot_df$p_adj_safe <- pmax(plot_df$p_adj, .Machine$double.xmin, na.rm = FALSE)
+
+## Keep the top 10 pathways ranked by adjusted p value
+plot_df <- plot_df[order(plot_df$p_adj_safe), ]
+plot_df <- head(plot_df, 10)
+plot_df$Description <- factor(plot_df$Description, levels = rev(plot_df$Description))
+
+## Plot pathway enrichment
+ggplot(plot_df, aes(x = -log10(p_adj_safe), y = Description, color = significance)) +
+  geom_point(size = 4, alpha = 0.9, na.rm = TRUE) +
+  scale_color_manual(values = c("significant" = "#C45745", "NS" = "#D1C2C2")) +
+  labs(
+    x = expression(-log[10]~adjusted~p~value),
+    y = NULL,
+    title = "Integrated Pathway Enrichment"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.y  = element_text(size = 14),
+    axis.text.x  = element_text(size = 14),
+    plot.title   = element_text(face = "bold", size = 15, hjust = 0.02),
+    legend.title = element_text(face = "bold")
+  )
+```
+
+A significant *p*-value indicates that the pathway is more strongly represented in the extracted choline-TMA-TMAO module than expected by chance, suggesting that it is biologically closely related to this metabolic axis. 
+
+# Conclusion
+
+MetaPathNet can be used to integrate multi-omics data into a network-based framework for the study of host–microbiome metabolism. By combining network construction with topology analysis, it helps reveal connections between host and microbial functions and supports the interpretation of metabolic interaction in a systems biology context.
+
+The pathway coverage of the reconstructed network depends on the selected organism panel. In this vignette, the workflow focuses on the human and one representative gut bacterial strain, whereas the inclusion of additional gut microbial species could provide a more complete representation of gut metabolic capacity. Network extension with information from other databases or with custom reactions can further adapt the analysis to the biological question of interest.
+
+# References
+
+```{r sessionInfo}
+sessionInfo()
+```

@@ -1,0 +1,52 @@
+Package: MetaPathNet
+Title: KEGG-Based Metabolic and Signaling Network Analysis for Systems Biology
+Version: 0.99.0
+Authors@R: c(
+    person("Zhaojie", "Wang", email = "zhaojie.wang@cnrs.fr", role = c("aut", "cre")),
+    person("Francesc", "Puig-Castellvi", role = "aut"),
+    person("Manyi", "Jia", role = "aut"),
+    person("Marc-Emmanuel", "Dumas", role = c("aut", "ths"))
+    )
+Description: Provides tools to construct KEGG-based metabolic and
+    signaling networks as edge lists for single-organism or cross-species
+    analyses. The package supports identifier mapping, shortest-path and
+    topology analyses, community detection, permutation testing, pathway
+    over-representation analysis, and node annotation for host-microbiome
+    studies. It also provides network visualisation in R and Cytoscape and
+    supports extension of KEGG-based networks through additional reaction
+    resources and user-defined reactions.
+Depends:
+    R (>= 4.3.0)
+Imports:
+    igraph,
+    httr,
+    utils,
+    RCurl,
+    RCy3,
+    tidygraph,
+    ggraph,
+    dplyr,
+    KEGGREST,
+    KEGGgraph,
+    graph,
+    mygene,
+    ggplot2,
+    curl,
+    jsonlite,
+    webchem,
+    grDevices,
+    grid,
+    stats
+Suggests:
+    testthat,
+    knitr,
+    rmarkdown,
+    BiocStyle
+biocViews: Network, Pathways, KEGG, SystemsBiology, Classification
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+VignetteBuilder: knitr
+URL: https://github.com/zhaojie-wang/MetaPathNet
+BugReports: https://github.com/zhaojie-wang/MetaPathNet/issues

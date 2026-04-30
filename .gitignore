@@ -1,0 +1,17 @@
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+.DS_Store
+
+MetaPathNet.Rcheck/
+MetaPathNet.BiocCheck/
+*.Rcheck/
+*.tar.gz
+
+check_log.txt
+install_log.txt
+bioccheck_log.txt
+
+vignettes/*.html
+vignettes/*.R

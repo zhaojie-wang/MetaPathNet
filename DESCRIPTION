@@ -42,6 +42,7 @@ Suggests:
     knitr,
     rmarkdown,
     BiocStyle
+SystemRequirements: Cytoscape (>= 3.9.0) for Cytoscape-based visualisation functions
 biocViews: Network, Pathways, KEGG, SystemsBiology, Classification
 License: MIT + file LICENSE
 Encoding: UTF-8

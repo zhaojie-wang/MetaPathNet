@@ -1,17 +1,17 @@
 bibentry(
-  bibtype  = "Manual",
-  title    = "MetaPathNet: Integrating Metabolic and Signaling Pathways for Systems Biology",
-  author   = c(
+  bibtype = "Manual",
+  title = "MetaPathNet: KEGG-Based Metabolic and Signaling Network Analysis for Systems Biology",
+  author = c(
     person("Zhaojie", "Wang"),
     person("Francesc", "Puig-Castellvi"),
     person("Manyi", "Jia"),
     person("Marc-Emmanuel", "Dumas")
   ),
-  year     = "2026",
-  note     = "R package version 0.99.0",
+  year = "2026",
+  note = "R package version 0.99.0",
   textVersion = paste(
     "Wang Z., Puig-Castellvi F., Jia M., and Dumas M.-E. (2026).",
-    "MetaPathNet: Integrating Metabolic and Signaling Pathways for Systems Biology.",
+    "MetaPathNet: KEGG-Based Metabolic and Signaling Network Analysis for Systems Biology.",
     "R package version 0.99.0."
   )
 )

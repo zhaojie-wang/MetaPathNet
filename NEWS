@@ -1,0 +1,13 @@
+CHANGES IN VERSION 0.99.0
+-------------------------
+
+NEW FEATURES
+
+    o Initial Bioconductor submission of MetaPathNet.
+
+    o Added KEGG-based metabolic and signaling network construction for
+      single-organism and cross-species analyses.
+
+    o Added identifier mapping, shortest-path analysis, permutation testing,
+      pathway over-representation analysis, node annotation, and network
+      visualisation utilities.

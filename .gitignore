@@ -1,8 +1,12 @@
 .Rproj.user/
+*.Rproj
 .Rhistory
 .RData
 .Ruserdata
+.Renviron
+.Rprofile
 .DS_Store
+.gitattributes
 
 MetaPathNet.Rcheck/
 MetaPathNet.BiocCheck/
@@ -13,6 +17,6 @@ check_log.txt
 install_log.txt
 bioccheck_log.txt
 
+vignette_preview/
 vignettes/*.html
 vignettes/*.R
-vignette_preview/

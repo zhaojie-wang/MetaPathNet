@@ -15,3 +15,4 @@ bioccheck_log.txt
 
 vignettes/*.html
 vignettes/*.R
+vignette_preview/

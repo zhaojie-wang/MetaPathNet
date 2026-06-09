@@ -231,7 +231,7 @@ MPN_suggestEntities <- function(query, entity = c("ko", "compound")) {
     ## Report retrieval failures
     if (length(failed_kos) > 0) {
       message(
-        "Warning: KEGG query failed for ", length(failed_kos), " KO(s): ",
+        "KEGG query failed for ", length(failed_kos), " KO(s): ",
         paste(failed_kos, collapse = ", "),
         "\nThese were skipped."
       )
@@ -409,7 +409,7 @@ MPN_suggestEntities <- function(query, entity = c("ko", "compound")) {
   #==============================================================
   if (length(failed_cpds) > 0) {
     message(
-      "Warning: KEGG query failed for ", length(failed_cpds), " compound(s): ",
+      "KEGG query failed for ", length(failed_cpds), " compound(s): ",
       paste(failed_cpds, collapse = ", "),
       "\nThese were skipped."
     )

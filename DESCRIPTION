@@ -1,8 +1,13 @@
 Package: MetaPathNet
 Title: KEGG-Based Metabolic and Signaling Network Analysis for Systems Biology
-Version: 0.99.0
+Version: 0.99.1
 Authors@R: c(
-    person("Zhaojie", "Wang", email = "zhaojie.wang@cnrs.fr", role = c("aut", "cre")),
+    person(
+        "Zhaojie", "Wang",
+        email = "zhaojie.wang@cnrs.fr",
+        role = c("aut", "cre"),
+        comment = c(ORCID = "0009-0009-7191-2107")
+    ),
     person("Francesc", "Puig-Castellvi", role = "aut"),
     person("Manyi", "Jia", role = "aut"),
     person("Marc-Emmanuel", "Dumas", role = c("aut", "ths"))
@@ -43,7 +48,7 @@ Suggests:
     rmarkdown,
     BiocStyle
 SystemRequirements: Cytoscape (>= 3.9.0) for Cytoscape-based visualisation functions
-biocViews: Network, Pathways, KEGG, SystemsBiology, Classification
+biocViews: Network, Pathways, KEGG, SystemsBiology, Classification, Microbiome
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

@@ -158,7 +158,7 @@ MPN_mapCompoundsToPathways <- function(compounds, organism_codes) {
       )
 
       if (is.null(path_parsed)) {
-        message("    ", path, " - parseKGML error, skipping")
+        message("    ", path, " - parseKGML failed, skipping")
         next
       }
 
@@ -173,7 +173,7 @@ MPN_mapCompoundsToPathways <- function(compounds, organism_codes) {
       )
 
       if (is.null(path_network)) {
-        message("    ", path, " - KEGGpathway2Graph error, skipping")
+        message("    ", path, " - KEGGpathway2Graph failed, skipping")
         next
       }
 

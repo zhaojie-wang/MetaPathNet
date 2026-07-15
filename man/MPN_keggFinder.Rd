@@ -19,7 +19,8 @@ For \code{KEGG_database = "compound"}: one of \code{"name"},
 \code{"sid"}, \code{"cid"}, \code{"SMILES"}, \code{"InChI"},
 or \code{"InChIKey"}.
 For \code{KEGG_database = "organism"}: one of \code{"name"} or
-\code{"taxon_id"}.
+\code{"taxon_id"}, where \code{"taxon_id"} refers to the KEGG genome
+T number.
 For \code{KEGG_database = "ko"}: one of \code{"name"},
 \code{"symbol"}, or \code{"ECnumber"}.}
 
@@ -46,13 +47,12 @@ identifiers.
 }
 \details{
 For compounds, name queries are first matched against the live KEGG
-compound table. Unresolved queries, as well as SID, CID, SMILES, InChI,
-and InChIKey inputs, are further queried through PubChem and converted
-to KEGG compound IDs when possible.
+compound table. Unresolved names and structure-based inputs are queried
+through PubChem, and supported PubChem identifiers are converted to KEGG
+compound IDs when possible.
 
-For organisms, matching is performed against the live KEGG organism
-table. Name queries are checked against both scientific names and common
-names extracted from the KEGG species field.
+For organisms, matching is performed against the live KEGG genome table.
+Scientific and common names are matched exactly without regard to case.
 
 For KO terms, the current KEGG KO table is retrieved through the KEGG
 REST API. Symbol queries may return multiple KO IDs combined with
@@ -67,11 +67,11 @@ MPN_keggFinder(
 )
 
 ## 2) Map organisms to KEGG organism codes by name
-## NA is returned for "dragon" because it is not a real organism in KEGG.
+## NA is returned when no exact KEGG organism match is found.
 MPN_keggFinder(
   KEGG_database = "organism",
   searchBy      = "name",
-  query         = c("human", "horse", "dragon")
+  query         = c("human", "horse", "dragon", "Escherichia coli W")
 )
 
 ## 3) Map enzyme EC numbers to KEGG KO identifiers

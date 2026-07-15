@@ -10,7 +10,8 @@
 #'   \code{"sid"}, \code{"cid"}, \code{"SMILES"}, \code{"InChI"},
 #'   or \code{"InChIKey"}.
 #'   For \code{KEGG_database = "organism"}: one of \code{"name"} or
-#'   \code{"taxon_id"}.
+#'   \code{"taxon_id"}, where \code{"taxon_id"} refers to the KEGG genome
+#'   T number.
 #'   For \code{KEGG_database = "ko"}: one of \code{"name"},
 #'   \code{"symbol"}, or \code{"ECnumber"}.
 #' @param query Vector of queries to be matched. Non-character input is
@@ -31,13 +32,12 @@
 #'
 #' @details
 #' For compounds, name queries are first matched against the live KEGG
-#' compound table. Unresolved queries, as well as SID, CID, SMILES, InChI,
-#' and InChIKey inputs, are further queried through PubChem and converted
-#' to KEGG compound IDs when possible.
+#' compound table. Unresolved names and structure-based inputs are queried
+#' through PubChem, and supported PubChem identifiers are converted to KEGG
+#' compound IDs when possible.
 #'
-#' For organisms, matching is performed against the live KEGG organism
-#' table. Name queries are checked against both scientific names and common
-#' names extracted from the KEGG species field.
+#' For organisms, matching is performed against the live KEGG genome table.
+#' Scientific and common names are matched exactly without regard to case.
 #'
 #' For KO terms, the current KEGG KO table is retrieved through the KEGG
 #' REST API. Symbol queries may return multiple KO IDs combined with
@@ -52,11 +52,11 @@
 #' )
 #'
 #' ## 2) Map organisms to KEGG organism codes by name
-#' ## NA is returned for "dragon" because it is not a real organism in KEGG.
+#' ## NA is returned when no exact KEGG organism match is found.
 #' MPN_keggFinder(
 #'   KEGG_database = "organism",
 #'   searchBy      = "name",
-#'   query         = c("human", "horse", "dragon")
+#'   query         = c("human", "horse", "dragon", "Escherichia coli W")
 #' )
 #'
 #' ## 3) Map enzyme EC numbers to KEGG KO identifiers
@@ -70,7 +70,7 @@
 #' @importFrom curl curl_fetch_memory new_handle
 #' @importFrom jsonlite fromJSON
 #' @importFrom webchem get_cid
-#' @importFrom KEGGREST keggConv keggGet keggLink
+#' @importFrom KEGGREST keggList
 #' @export
 MPN_keggFinder <- function(
     KEGG_database = c("compound", "organism", "ko"),
@@ -87,10 +87,10 @@ MPN_keggFinder <- function(
   }
 
   query_chr <- trimws(as.character(query))
-  query_chr <- query_chr[query_chr != ""]
+  query_chr <- query_chr[!is.na(query_chr) & nzchar(query_chr)]
 
-  if (length(query_chr) == 0) {
-    stop("All provided query values are empty after trimming.")
+  if (length(query_chr) == 0L) {
+    stop("All provided query values are missing or empty after trimming.")
   }
 
   #==============================================================
@@ -116,33 +116,56 @@ MPN_keggFinder <- function(
 
     ## For name input, first try direct KEGG compound name / synonym matching
     if (searchBy == "name") {
-      response <- tryCatch(
-        rawToChar(
-          curl::curl_fetch_memory(
-            "https://rest.kegg.jp/list/compound",
-            handle = curl::new_handle()
-          )$content
+
+      ## Retrieve the live KEGG compound table safely
+      compound_res <- tryCatch(
+        curl::curl_fetch_memory(
+          "https://rest.kegg.jp/list/compound",
+          handle = curl::new_handle()
         ),
         error = function(e) NULL
       )
 
-      if (!is.null(response)) {
-        compound_df <- read.delim(
-          text = response,
-          header = FALSE,
-          sep = "\t",
-          quote = "",
-          stringsAsFactors = FALSE
-        )
+      compound_df <- NULL
+
+      ## Parse the response only if KEGG returned non-empty content
+      if (
+        !is.null(compound_res) &&
+        isTRUE(compound_res$status_code == 200L) &&
+        length(compound_res$content) > 0L
+      ) {
+        response <- rawToChar(compound_res$content)
+
+        if (nzchar(trimws(response))) {
+          compound_df <- tryCatch(
+            utils::read.delim(
+              text = response,
+              header = FALSE,
+              sep = "\t",
+              quote = "",
+              stringsAsFactors = FALSE
+            ),
+            error = function(e) NULL
+          )
+        }
+      }
+
+      ## Keep only valid KEGG compound tables
+      if (!is.null(compound_df) && ncol(compound_df) >= 2L) {
+        compound_df <- compound_df[, seq_len(2), drop = FALSE]
         colnames(compound_df) <- c("KEGG_ID", "common_names")
         rownames(compound_df) <- NULL
+      } else {
+        compound_df <- NULL
+      }
 
+      ## Match user names against KEGG compound names and synonyms
+      if (!is.null(compound_df)) {
         resolved_idx <- logical(length(query_chr))
 
         for (i in seq_along(query_chr)) {
           q <- query_chr[i]
 
-          ## Match against all KEGG compound names and semicolon-separated synonyms
           hit_idx <- vapply(compound_df$common_names, function(x) {
             syns <- trimws(unlist(strsplit(x, ";", fixed = TRUE)))
             any(tolower(syns) == tolower(q))
@@ -160,7 +183,7 @@ MPN_keggFinder <- function(
           }
         }
 
-        ## Only unresolved names continue to the PubChem route
+        ## Only unresolved names continue to the PubChem fallback route
         unresolved_query <- query_chr[!resolved_idx]
       }
     }
@@ -452,7 +475,7 @@ MPN_keggFinder <- function(
   }
 
   #==============================================================
-  # Step 2 — Organism lookup using live KEGG organism table
+  # Step 2 — Organism lookup using live KEGG genome table
   #==============================================================
   if (KEGG_database == "organism") {
     ## Validate accepted input types for organism lookup
@@ -466,36 +489,53 @@ MPN_keggFinder <- function(
 
     searchBy <- tolower(searchBy)
 
-    ## Retrieve the live KEGG organism table
-    response <- tryCatch(
-      rawToChar(
-        curl::curl_fetch_memory(
-          "https://rest.kegg.jp/list/organism",
-          handle = curl::new_handle()
-        )$content
-      ),
+    ## Retrieve the live KEGG genome table
+    genome <- tryCatch(
+      KEGGREST::keggList("genome"),
       error = function(e) NULL
     )
 
-    if (is.null(response)) {
-      stop("Failed to retrieve the KEGG organism table from /list/organism.")
+    if (is.null(genome) || length(genome) == 0L || is.null(names(genome))) {
+      stop("Failed to retrieve the KEGG genome table.")
     }
 
-    organism_df <- read.delim(
-      text = response,
-      header = FALSE,
-      sep = "\t",
-      quote = "",
+    genome_value <- trimws(as.character(genome))
+
+    ## Keep only rows matching the current KEGG genome format
+    valid_genome <- !is.na(names(genome)) &
+      nzchar(names(genome)) &
+      !is.na(genome_value) &
+      nzchar(genome_value) &
+      grepl(";", genome_value, fixed = TRUE)
+
+    if (!any(valid_genome)) {
+      stop("KEGG genome table returned no parseable rows.")
+    }
+
+    genome <- genome[valid_genome]
+    genome_value <- genome_value[valid_genome]
+
+    ## Build the organism lookup table from the genome response
+    organism_df <- data.frame(
+      taxon_id = names(genome),
+      organism = trimws(sub(";.*$", "", genome_value)),
+      species  = trimws(sub("^[^;]+;\\s*", "", genome_value)),
       stringsAsFactors = FALSE
     )
 
-    if (ncol(organism_df) < 4) {
-      stop("Unexpected KEGG organism table format returned by /list/organism.")
+    ## Remove any incomplete rows after parsing
+    organism_df <- organism_df[
+      nzchar(organism_df$taxon_id) &
+        nzchar(organism_df$organism) &
+        nzchar(organism_df$species),
+      ,
+      drop = FALSE
+    ]
+
+    if (nrow(organism_df) == 0L) {
+      stop("KEGG genome table returned no valid organism entries.")
     }
 
-    ## Build an internal organism table from the live KEGG response
-    organism_df <- organism_df[, seq_len(4)]
-    colnames(organism_df) <- c("taxon_id", "organism", "species", "phylogeny")
     rownames(organism_df) <- NULL
 
     ## Split "Homo sapiens (human)" into scientific and common names
@@ -578,14 +618,47 @@ MPN_keggFinder <- function(
     }
 
     ## Retrieve KO descriptions from KEGG REST API
-    ko_url <- "https://rest.kegg.jp/list/ko/"
-    ko_df <- read.delim(
-      ko_url,
-      header = FALSE,
-      sep = "\t",
-      quote = "",
-      stringsAsFactors = FALSE
+    ko_res <- tryCatch(
+      curl::curl_fetch_memory(
+        "https://rest.kegg.jp/list/ko",
+        handle = curl::new_handle()
+      ),
+      error = function(e) NULL
     )
+
+    ## Stop before parsing if KEGG returned an empty or failed response
+    if (
+      is.null(ko_res) ||
+      !isTRUE(ko_res$status_code == 200L) ||
+      length(ko_res$content) == 0L
+    ) {
+      stop("Failed to retrieve the KEGG KO table.")
+    }
+
+    ko_response <- rawToChar(ko_res$content)
+
+    if (!nzchar(trimws(ko_response))) {
+      stop("KEGG KO table returned an empty response.")
+    }
+
+    ## Parse the KO table only after confirming non-empty content
+    ko_df <- tryCatch(
+      utils::read.delim(
+        text = ko_response,
+        header = FALSE,
+        sep = "\t",
+        quote = "",
+        stringsAsFactors = FALSE
+      ),
+      error = function(e) NULL
+    )
+
+    if (is.null(ko_df) || ncol(ko_df) < 2L || nrow(ko_df) == 0L) {
+      stop("Unexpected KEGG KO table format.")
+    }
+
+    ## Keep the standard KO ID and description columns
+    ko_df <- ko_df[, seq_len(2), drop = FALSE]
     colnames(ko_df) <- c("KO", "Description")
 
     ## Pre-compute symbol, name, and EC-number fields from KEGG descriptions

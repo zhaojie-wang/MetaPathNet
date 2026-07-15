@@ -76,7 +76,7 @@ The workflow therefore proceeds through identifier mapping, cross-species networ
 
 ## Identifier mapping
 
-The package requires KEGG identifiers as common reference IDs for metabolites, genes, enzymes, and organisms to support network construction and analysis. To facilitate the process of network construction, the `MetaPathNet` package includes the `MPN_keggFinder()` function for retrieving KEGG identifiers from metabolite names, gene symbols, and from species taxonomy IDs (i.e., NCBI).
+The package requires KEGG identifiers as common reference IDs for metabolites, genes, enzymes, and organisms to support network construction and analysis. To facilitate network construction, `MetaPathNet` includes the `MPN_keggFinder()` function for retrieving KEGG identifiers from metabolite names, KO names or symbols, enzyme EC numbers, organism names, and KEGG genome T numbers.
 
 In this choline-related case study, the selected metabolites cover the main trimethylated nutrient and methylamine axis, including choline, carnitine, betaine, gamma-butyrobetaine, trimethylamine (TMA), and trimethylamine N-oxide (TMAO). The package supports flexible metabolite mapping through synonym matching and case-insensitive search.
 
@@ -116,7 +116,7 @@ The selected genes represent key biological functions involved in the choline-TM
 
 However, choline trimethylamine-lyase (*cutC* / `K20038`) and host flavin-containing monooxygenases (*FMO* / `K00485`) were not recovered from the compound-based suggestion step, although they remain important for this case study. `MPN_suggestEntities()` should therefore be used as a guidance tool, while literature knowledge remains helpful for broader biological selection.
 
-The same function can also retrieve candidate organisms from a KO list. It reports prokaryotic organisms carrying the selected functions, counts how many query KOs are represented in each organism, and ranks them as a reference list for organism selection.
+The same function can also retrieve candidate organisms from a KO list. It reports prokaryotic organisms carrying the selected functions, while retaining *Homo sapiens* (`hsa`) as a host reference when present. It counts how many query KOs are represented in each organism and ranks them as a reference list for organism selection.
 
 ```{r organism_suggestion}
 ## Define KO candidates of interest
@@ -323,7 +323,7 @@ print(network_tma_R)
 
 ## Origin annotation
 
-The shortest-path subnetwork is more directly centered on the choline-TMA-TMAO axis. Using `MPN_annotateOrigin()`, KO nodes were annotated by inferred origin as human-associated, microbial-associated, or shared, allowing direct interpretation of the biological components involved in this module. Cytoscape also provides more flexible customisation of node colours and edge types.
+The shortest-path subnetwork is more directly centered on the choline-TMA-TMAO axis. Using `MPN_annotateOrigin()`, KO nodes were annotated by inferred origin as human-associated, bacterial-associated, shared between human and bacteria, or other, allowing direct interpretation of the biological components involved in this module. Cytoscape also provides more flexible customisation of node colours and edge types.
 
 ```{r KO_origin_visualisation, eval=FALSE}
 ## Visualise the origin-annotated shortest-path network in Cytoscape

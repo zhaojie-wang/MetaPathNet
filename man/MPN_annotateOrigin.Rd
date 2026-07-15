@@ -23,46 +23,52 @@ MPN_annotateOrigin(
 \code{source} and \code{target}. If a third column is present, it is
 interpreted as \code{interaction_type}.}
 
-\item{bacteria_codes}{Optional character vector of KEGG organism codes.
-Restricts the \code{"bacteria"} and \code{"hsa&bacteria"} classes to this
-set. If \code{NULL} (default), all KEGG bacterial organism codes are used.}
+\item{bacteria_codes}{Optional character vector of KEGG bacterial organism
+codes. Restricts the \code{"bacteria"} and \code{"hsa&bacteria"} classes
+to this set. If \code{NULL}, all KEGG bacterial organism codes are used.}
 
 \item{name}{Logical. If \code{TRUE}, node display names are converted from
-KEGG entries (KO: \code{SYMBOL} preferred, then \code{NAME}; non-KO:
-cleaned KEGG \code{NAME}). If \code{FALSE}, KEGG IDs are kept as labels.}
+KEGG entries. For KO nodes, \code{SYMBOL} is preferred and \code{NAME}
+is used as a fallback. For non-KO nodes, the KEGG \code{NAME} field is
+used. If \code{FALSE}, KEGG IDs are retained as labels.}
 
-\item{export_cytoscape}{Logical (default \code{FALSE}). If \code{TRUE}, the
-annotated network is exported to Cytoscape and styled by origin class.
-If \code{FALSE}, only the annotation table is returned.}
+\item{export_cytoscape}{Logical. If \code{TRUE}, the annotated network is
+exported to Cytoscape and styled by origin class. If \code{FALSE}, only
+the annotation table is returned.}
 
 \item{compound_color}{Hex colour for compound nodes.}
 
 \item{hsa_color}{Hex colour for KO nodes classified as \code{"hsa"}.}
 
-\item{micro_color}{Hex colour for KO nodes classified as \code{"bacteria"}.}
+\item{micro_color}{Hex colour for KO nodes classified as
+\code{"bacteria"}.}
 
-\item{hsa_micro_color}{Hex colour for KO nodes classified as \code{"hsa&bacteria"}.}
+\item{hsa_micro_color}{Hex colour for KO nodes classified as
+\code{"hsa&bacteria"}.}
 
 \item{other_color}{Hex colour for KO nodes classified as \code{"other"}.}
 
-\item{network_title}{Character. Cytoscape network title (used only when
-\code{export_cytoscape = TRUE}).}
+\item{network_title}{Character string specifying the Cytoscape network
+title. Used only when \code{export_cytoscape = TRUE}.}
 
-\item{collection_title}{Character. Cytoscape collection title (used only when
-\code{export_cytoscape = TRUE}).}
+\item{collection_title}{Character string specifying the Cytoscape collection
+title. Used only when \code{export_cytoscape = TRUE}.}
 }
 \value{
 A node-level data frame with columns:
 \itemize{
 \item \code{id}: KEGG node identifier.
-\item \code{type}: coarse node type (\code{"KO"}, \code{"Compound"}, \code{"Other"}).
-\item \code{name}: display label (KEGG ID or converted KEGG name/symbol).
-\item \code{origin}: inferred origin class (\code{"compound"}, \code{"hsa"},
-\code{"bacteria"}, \code{"hsa&bacteria"}, \code{"other"}).
+\item \code{type}: coarse node type (\code{"KO"}, \code{"Compound"},
+or \code{"Other"}).
+\item \code{name}: display label containing the KEGG ID or converted
+KEGG name or symbol.
+\item \code{origin}: inferred origin class (\code{"compound"},
+\code{"hsa"}, \code{"bacteria"}, \code{"hsa&bacteria"}, or
+\code{"other"}).
 }
 
 If \code{export_cytoscape = TRUE}, the function also creates and styles a
-Cytoscape network as a side effect, and returns the same annotation table
+Cytoscape network as a side effect and returns the annotation table
 invisibly.
 }
 \description{
@@ -73,41 +79,54 @@ shared (\code{"hsa&bacteria"}), or \code{"other"} based on KEGG annotations.
 Compound nodes are assigned the separate class \code{"compound"}.
 }
 \details{
-The primary output is a node-level annotation table (ID, type, display name,
-origin). Cytoscape export is optional and can be enabled to visualise the
-annotated network with origin-based node colours.
+The primary output is a node-level annotation table containing the node ID,
+type, display name, and origin. Cytoscape export is optional and can be
+enabled to visualise the annotated network with origin-based node colours.
 
-KO origin is inferred from KEGG \code{GENES} annotations via
+KO origin is inferred from KEGG \code{GENES} annotations retrieved with
 \code{KEGGREST::keggGet()}:
 \itemize{
-\item \code{"hsa"} if the KO has human genes only.
-\item \code{"bacteria"} if the KO has bacterial genes only.
-\item \code{"hsa&bacteria"} if both human and bacterial genes are present.
+\item \code{"hsa"} if \code{hsa} is present and no selected bacterial
+organism code is detected.
+\item \code{"bacteria"} if at least one selected bacterial organism code
+is detected and \code{hsa} is absent.
+\item \code{"hsa&bacteria"} if both \code{hsa} and at least one selected
+bacterial organism code are detected.
 \item \code{"other"} if none of the above can be established.
 }
 
-Bacterial organism codes are derived from \code{KEGGREST::keggList("organism")}
-using the \code{"Prokaryotes;Bacteria"} phylogeny prefix. The
-\code{bacteria_codes} argument can be used to restrict the bacterial origin
-class to a user-defined organism panel (e.g. cohort-specific microbes).
-If \code{bacteria_codes = NULL} (default), all KEGG bacterial organism codes
-are used.
+The \code{bacteria_codes} argument can be used to restrict the bacterial
+origin class to a user-defined organism panel, such as cohort-specific
+microbes. If \code{bacteria_codes = NULL}, all KEGG bacterial organism
+codes are used.
 
-Cytoscape (v\eqn{>=}3.9.0) must be running
+If the KEGG genome or bacterial genome-group information cannot be
+retrieved, the function issues a warning instead of stopping. In this case,
+KO nodes linked exclusively to \code{hsa} are classified as \code{"hsa"},
+while other KO nodes are classified as \code{"other"}.
+
+Cytoscape version 3.9.0 or later must be running when
+\code{export_cytoscape = TRUE}.
 
 Reverse duplicated edges are collapsed for Cytoscape display when they
-share the same metabolic interaction type
+share the same supported metabolic interaction type.
 }
 \examples{
-## 1) Build a mixed human-E. coli Trp-focused network (used below)
-## Load the precomputed example network; see MPN_keggNetwork() for its construction
+\donttest{
+## 1) Load the precomputed mixed human-E. coli example network
 data(MetaPathNet_example_network)
 net_trp_mixed <- MetaPathNet_example_network
 
-## 2) Build a shortest-path subnetwork (paths_trp_mixed) for origin annotation
-source_nodes <- c("K00486", "K00453", "K00463", "K01667", "K01696", "K01610", "K01695")
-target_nodes <- c("cpd:C00078", "cpd:C00328", "cpd:C00780", "cpd:C00463",
-                  "cpd:C00108", "cpd:C00458", "cpd:C00336")
+## 2) Build a shortest-path subnetwork for origin annotation
+source_nodes <- c(
+  "K00486", "K00453", "K00463", "K01667",
+  "K01696", "K01610", "K01695"
+)
+
+target_nodes <- c(
+  "cpd:C00078", "cpd:C00328", "cpd:C00780", "cpd:C00463",
+  "cpd:C00108", "cpd:C00458", "cpd:C00336"
+)
 
 map_src <- MPN_findMappedNodes(source_nodes, net_trp_mixed)
 map_tgt <- MPN_findMappedNodes(target_nodes, net_trp_mixed)
@@ -122,13 +141,16 @@ paths_trp_mixed <- MPN_shortestPaths(
   distance_threshold = 6
 )
 
-## 3) Return annotation table only (main use)
+## 3) Return the annotation table while retaining KEGG IDs as labels
 origin_paths_trp_mixed <- MPN_annotateOrigin(
-  network_table   = paths_trp_mixed,
-  bacteria_codes  = NULL,   # NULL = use all KEGG bacterial organism codes
-  name            = FALSE,   # convert IDs to KEGG names/symbols in the output table
+  network_table    = paths_trp_mixed,
+  bacteria_codes   = NULL,
+  name             = FALSE,
   export_cytoscape = FALSE
 )
+
+head(origin_paths_trp_mixed)
+}
 
 }
 \seealso{

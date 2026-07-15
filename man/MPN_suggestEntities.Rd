@@ -2,63 +2,70 @@
 % Please edit documentation in R/MPN_suggestEntities.R
 \name{MPN_suggestEntities}
 \alias{MPN_suggestEntities}
-\title{Suggest Candidate Organisms or KOs from KEGG Identifiers}
+\title{Suggest Candidate Prokaryotic Organisms or KOs from KEGG Identifiers}
 \usage{
 MPN_suggestEntities(query, entity = c("ko", "compound"))
 }
 \arguments{
 \item{query}{Character vector of KEGG identifiers. For
-\code{entity = "ko"}, KO IDs should be in the form
+\code{entity = "ko"}, KO IDs should follow the form
 \code{"K#####"}. For \code{entity = "compound"}, compound IDs
-should be in the form \code{"C#####"} or \code{"cpd:C#####"}.}
+should follow the form \code{"C#####"} or \code{"cpd:C#####"}.}
 
 \item{entity}{Character string specifying the input type:
 \code{"ko"} or \code{"compound"}. Only one entity type is
 accepted per call.}
 }
 \value{
-A \code{data.frame} whose structure depends on the entity type:
+A \code{data.frame} whose structure depends on
+\code{entity}:
 \describe{
-\item{For \code{entity = "ko"}:}{Columns \code{organism_name},
-\code{organism_code}, \code{overlap_count}, and
-\code{overlap_hits}. Rows are ranked by decreasing
-\code{overlap_count}.}
-\item{For \code{entity = "compound"}:}{Columns
-\code{compound_id}, \code{compound_name}, \code{KO_ID}, and
-\code{KO_name}. Rows are deduplicated.}
+\item{For \code{entity = "ko"}:}{
+Columns \code{organism_name}, \code{organism_code},
+\code{overlap_count}, and \code{overlap_hits}. Candidate
+prokaryotic organisms and \code{hsa}, when present, are ranked
+by decreasing \code{overlap_count}.
+}
+\item{For \code{entity = "compound"}:}{
+Columns \code{compound_id}, \code{compound_name},
+\code{KO_ID}, and \code{KO_name}. Duplicate rows are removed.
+}
 }
 An empty data frame with the appropriate columns is returned when
-no candidates are found.
+no candidates are found or when the required KEGG genome
+classification cannot be retrieved.
 }
 \description{
-Suggest candidate organisms from KEGG KO IDs or candidate KEGG
-Orthology (KO) annotations from KEGG compound IDs.
+Suggest candidate prokaryotic organisms from KEGG KO IDs or candidate
+KEGG Orthology (KO) annotations from KEGG compound IDs.
 }
 \details{
-This function supports semi-automated candidate selection during
-network construction.
+The organism-suggestion workflow focuses on prokaryotic organisms to
+support host-microbiome network construction. \emph{Homo sapiens}
+(\code{hsa}) is retained when present as the host reference.
 
 For \code{entity = "ko"}, each KO is queried with
 \code{KEGGREST::keggLink()} to retrieve genes carrying that
 orthology assignment. Organism codes are extracted from the linked
-KEGG gene IDs, matched to the live KEGG organism table, filtered to
-prokaryotes and \emph{Homo sapiens} (\code{hsa}), and ranked by the
-number of query KOs found in each organism.
+KEGG gene IDs and matched to the live KEGG genome table.
+
+Broad organism classification is reconstructed from the KEGG
+eukaryotic and prokaryotic genome groups. Candidate organisms are
+restricted to prokaryotes, while \emph{Homo sapiens}
+(\code{hsa}) is retained as a host reference. Organisms are ranked
+according to the number of input KOs represented in each genome.
 
 For \code{entity = "compound"}, each compound is queried with
-\code{KEGGREST::keggGet()}, linked KEGG reaction IDs are extracted,
-and each reaction is searched for KO annotations through its
-\code{$ORTHOLOGY} field.
+\code{KEGGREST::keggGet()}. Linked KEGG reaction IDs are extracted,
+and the \code{ORTHOLOGY} field of each reaction is used to retrieve
+associated candidate KOs.
 
-Input IDs are validated before querying KEGG. If none of the input
-IDs have a valid format, the function stops with an error. Invalid
-IDs are otherwise removed with a message. KEGG retrieval failures,
-missing reaction links, and missing orthology annotations are
-handled internally and reported without interrupting execution.
+Input IDs are validated before querying KEGG. If none of the supplied
+IDs has a valid format, the function stops with an error.
 }
 \examples{
 \donttest{
-## 1) Compound to KO: retrieve candidate KOs from mapped compounds
+## 1) Retrieve candidate KOs associated with selected compounds
 cpd_ids <- MPN_keggFinder(
   KEGG_database = "compound",
   searchBy      = "name",
@@ -70,9 +77,11 @@ ko_results <- MPN_suggestEntities(
   entity = "compound"
 )
 
-## 2) KO to organism: retrieve candidate prokaryotic organisms
+head(ko_results)
+
+## 2) Retrieve candidate prokaryotic organisms from selected KOs
 org_results <- MPN_suggestEntities(
-  query  = ko_results$KO_ID,
+  query  = c("K18277", "K07811", "K00108", "K14156"),
   entity = "ko"
 )
 
@@ -81,6 +90,6 @@ head(org_results)
 
 }
 \seealso{
-\code{\link{MPN_keggFinder}} for converting metabolite names,
+\code{\link{MPN_keggFinder}} for converting compound names,
 organism names, or enzyme EC numbers to KEGG identifiers.
 }

@@ -1,6 +1,6 @@
 Package: MetaPathNet
 Title: KEGG-Based Metabolic and Signaling Network Analysis for Systems Biology
-Version: 0.99.1
+Version: 0.99.2
 Authors@R: c(
     person(
         "Zhaojie", "Wang",

@@ -67,12 +67,14 @@ MPN_keggFinder(
 )
 
 ## 2) Map organisms to KEGG organism codes by name
-## NA is returned when no exact KEGG organism match is found.
+## This example requires live KEGG genome access.
+\donttest{
 MPN_keggFinder(
   KEGG_database = "organism",
   searchBy      = "name",
   query         = c("human", "horse", "dragon", "Escherichia coli W")
 )
+}
 
 ## 3) Map enzyme EC numbers to KEGG KO identifiers
 MPN_keggFinder(
